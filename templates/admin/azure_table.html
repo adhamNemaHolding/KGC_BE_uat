@@ -1,0 +1,70 @@
+{% extends "admin/base_site.html" %}
+{% load i18n azure_tags %}
+
+{% block title %}{{ table_name }} | {{ site_title }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:azure-index' %}">Tables</a>
+    &rsaquo; {{ table_name }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <h2>{{ table_name }}</h2>
+    <p class="help">{{ total }} row{{ total|pluralize }} total — showing page {{ page }} of {{ total_pages }}</p>
+
+    {% if rows %}
+    <div style="overflow-x: auto;">
+    <table id="result_list">
+        <thead>
+            <tr>
+                {% for col in columns %}
+                <th><div class="text"><a href="#">{{ col }}</a></div></th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr class="{% cycle 'row1' 'row2' %}">
+                {% for col in columns %}
+                <td>{{ row|get_item:col }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    {# Pagination #}
+    <p class="paginator">
+        {% if has_prev %}
+        <a href="?p={{ page|add:"-1" }}">&laquo; Previous</a>
+        {% endif %}
+
+        {% for p in page_range %}
+            {% if p == page %}
+                <span class="this-page">{{ p }}</span>
+            {% else %}
+                <a href="?p={{ p }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+
+        {% if has_next %}
+        <a href="?p={{ page|add:"1" }}">Next &raquo;</a>
+        {% endif %}
+
+        &nbsp;&nbsp; {{ total }} result{{ total|pluralize }}
+    </p>
+    {% else %}
+    <p>No rows found in this table.</p>
+    {% endif %}
+
+    <br>
+    <a href="{% url 'admin:azure-index' %}">&larr; Back to all tables</a>
+
+</div>
+{% endblock %}

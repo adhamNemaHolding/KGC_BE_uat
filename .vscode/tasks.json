@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Send Test Weekly Report",
+			"type": "shell",
+			"command": "c:/Users/adham.n/Downloads/KGC_SkillAdvisor-main/KGC_SkillAdvisor-main/.venv/Scripts/python.exe test_weekly_report.py",
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}

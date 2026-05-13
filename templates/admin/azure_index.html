@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    {% if error %}
+    <div class="errornote">
+        <p>Could not connect to Azure SQL: {{ error }}</p>
+    </div>
+    {% endif %}
+
+    <h2>Azure SQL Tables</h2>
+    {% if tables %}
+    <table>
+        <thead>
+            <tr>
+                <th>Schema</th>
+                <th>Table Name</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tables %}
+            <tr class="{% cycle 'row1' 'row2' %}">
+                <td>{{ t.TABLE_SCHEMA }}</td>
+                <td><strong>{{ t.TABLE_NAME }}</strong></td>
+                <td>
+                    <a href="{% url 'admin:azure-table' t.TABLE_NAME %}">View Data</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        {% if not error %}
+        <p>No tables found.</p>
+        {% endif %}
+    {% endif %}
+
+</div>
+{% endblock %}
