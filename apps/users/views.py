@@ -30,6 +30,57 @@ def _get_customer(request: Request) -> Customer | None:
     return user if isinstance(user, Customer) else None
 
 
+def _get_language(request: Request) -> str:
+    """Resolve language from body/query/header with sane fallback."""
+    body_lang = request.data.get("language") if hasattr(request, "data") and isinstance(request.data, dict) else None
+    if body_lang in ("en", "ar"):
+        return body_lang
+
+    query_lang = request.query_params.get("lang", "").strip().lower()
+    if query_lang in ("en", "ar"):
+        return query_lang
+
+    header = (request.headers.get("Accept-Language") or "en").split(",")[0].strip().lower()
+    if header.startswith("ar"):
+        return "ar"
+    return "en"
+
+
+def _msg(request: Request, en: str, ar: str) -> str:
+    return ar if _get_language(request) == "ar" else en
+
+
+USER_ERROR_TRANSLATIONS_AR: dict[str, str] = {
+    "Email and password are required.": "البريد الإلكتروني وكلمة المرور مطلوبان.",
+    "Role must be 'user' or 'company'.": "نوع الحساب يجب أن يكون مستخدمًا أو شركة.",
+    "company_name is required for company role.": "اسم الشركة مطلوب لحساب الشركة.",
+    "Email already registered.": "البريد الإلكتروني مسجل بالفعل.",
+    "Invalid or expired invitation link.": "رابط الدعوة غير صالح أو منتهي الصلاحية.",
+    "Invalid company code.": "رمز الشركة غير صالح.",
+    "A company with this name already exists.": "يوجد شركة بهذا الاسم بالفعل.",
+    "Invalid email or password.": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    "Refresh token is required.": "رمز التحديث مطلوب.",
+    "Verification token is required.": "رمز التحقق مطلوب.",
+    "Invalid or expired verification link.": "رابط التحقق غير صالح أو تم استخدامه بالفعل.",
+    "Email is required.": "البريد الإلكتروني مطلوب.",
+    "Token and new_password are required.": "الرمز وكلمة المرور الجديدة مطلوبان.",
+    "Invalid or expired reset token.": "رمز إعادة تعيين كلمة المرور غير صالح أو منتهي الصلاحية.",
+    "Customer not found.": "المستخدم غير موجود.",
+    "Authorization code is required.": "رمز التفويض مطلوب.",
+    "Google authentication failed.": "فشل تسجيل الدخول عبر Google.",
+    "Google did not return an access token.": "لم يرسل Google رمز الوصول.",
+    "Failed to get Google user info.": "فشل جلب معلومات مستخدم Google.",
+    "Google account has no email.": "حساب Google لا يحتوي على بريد إلكتروني.",
+    "Professional profile not found.": "لم يتم العثور على الملف المهني.",
+}
+
+
+def _localize_error_message(request: Request, message: str) -> str:
+    if _get_language(request) != "ar":
+        return message
+    return USER_ERROR_TRANSLATIONS_AR.get(message, message)
+
+
 def _customer_dict(customer: Customer) -> dict:
     return CustomerSerializer(customer).data
 
@@ -84,7 +135,7 @@ def signup(request: Request):
             invite_token=data.get("invite_token"),
         )
     except (ValueError, PermissionError) as e:
-        return error_response(str(e))
+        return error_response(_localize_error_message(request, str(e)))
 
     company_data = None
     if result.company:
@@ -136,9 +187,12 @@ def login(request: Request):
             password=request.data.get("password", ""),
         )
     except ValueError as e:
-        return error_response(str(e))
+        return error_response(_localize_error_message(request, str(e)))
     except PermissionError as e:
-        return error_response(str(e), status_code=status.HTTP_401_UNAUTHORIZED)
+        return error_response(
+            _localize_error_message(request, str(e)),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
 
     return success_response(data={
         "customer": _customer_dict(result.customer),
@@ -165,7 +219,10 @@ def refresh_token(request: Request):
     try:
         tokens = services.refresh_access_token(request.data.get("refresh", ""))
     except (ValueError, Exception) as e:
-        return error_response(str(e), status_code=status.HTTP_401_UNAUTHORIZED)
+        return error_response(
+            _localize_error_message(request, str(e)),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
     return success_response(data=tokens)
 
 
@@ -182,7 +239,9 @@ def refresh_token(request: Request):
 @permission_classes([AllowAny])
 def logout(request: Request):
     services.logout(request.data.get("refresh", ""))
-    return success_response(message="Logged out successfully.")
+    return success_response(
+        message=_msg(request, "Logged out successfully.", "تم تسجيل الخروج بنجاح.")
+    )
 
 
 @extend_schema(
@@ -208,9 +267,12 @@ def google_auth(request: Request):
             redirect_uri=request.data.get("redirect_uri", ""),
         )
     except ValueError as e:
-        return error_response(str(e))
+        return error_response(_localize_error_message(request, str(e)))
     except PermissionError as e:
-        return error_response(str(e), status_code=status.HTTP_401_UNAUTHORIZED)
+        return error_response(
+            _localize_error_message(request, str(e)),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
 
     return success_response(data={
         "customer": _customer_dict(result.customer),
@@ -239,10 +301,18 @@ def request_password_reset(request: Request):
     try:
         services.request_password_reset(request.data.get("email", ""))
     except ValueError as e:
-        return error_response(str(e))
+        return error_response(_localize_error_message(request, str(e)))
 
     # Always return the same message — never reveal whether the email exists
-    return success_response(data={"message": "If the email exists, a reset link has been sent."})
+    return success_response(
+        data={
+            "message": _msg(
+                request,
+                "If the email exists, a reset link has been sent.",
+                "إذا كان البريد الإلكتروني موجودًا، فقد تم إرسال رابط إعادة تعيين.",
+            )
+        }
+    )
 
 
 @extend_schema(
@@ -266,8 +336,14 @@ def confirm_password_reset(request: Request):
             new_password=request.data.get("new_password", ""),
         )
     except ValueError as e:
-        return error_response(str(e))
-    return success_response(message="Password reset successfully.")
+        return error_response(_localize_error_message(request, str(e)))
+    return success_response(
+        message=_msg(
+            request,
+            "Password reset successfully.",
+            "تمت إعادة تعيين كلمة المرور بنجاح.",
+        )
+    )
 
 
 @extend_schema(
@@ -285,8 +361,14 @@ def verify_email(request: Request):
     try:
         services.verify_email(request.data.get("token", ""))
     except ValueError as e:
-        return error_response(str(e))
-    return success_response(message="Email verified successfully.")
+        return error_response(_localize_error_message(request, str(e)))
+    return success_response(
+        message=_msg(
+            request,
+            "Email verified successfully.",
+            "تم التحقق من البريد الإلكتروني بنجاح.",
+        )
+    )
 
 
 @extend_schema(
@@ -306,8 +388,14 @@ def resend_verification(request: Request):
     try:
         services.resend_verification_email(request.data.get("email", ""))
     except ValueError as e:
-        return error_response(str(e))
-    return success_response(message="If the email exists and is unverified, a new link has been sent.")
+        return error_response(_localize_error_message(request, str(e)))
+    return success_response(
+        message=_msg(
+            request,
+            "If the email exists and is unverified, a new link has been sent.",
+            "إذا كان البريد الإلكتروني موجودًا وغير مُحقق، فقد تم إرسال رابط جديد.",
+        )
+    )
 
 
 # ============================================================================
@@ -320,7 +408,10 @@ def resend_verification(request: Request):
 def create_professional_profile(request: Request):
     customer = _get_customer(request)
     if not customer:
-        return error_response("Customer not found.", status_code=status.HTTP_404_NOT_FOUND)
+        return error_response(
+            _localize_error_message(request, "Customer not found."),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     profile, created = services.upsert_professional_profile(customer, request.data)
     serializer = ProfessionalProfileSerializer(profile)
@@ -334,11 +425,17 @@ def create_professional_profile(request: Request):
 def get_professional_profile(request: Request):
     customer = _get_customer(request)
     if not customer:
-        return error_response("Customer not found.", status_code=status.HTTP_404_NOT_FOUND)
+        return error_response(
+            _localize_error_message(request, "Customer not found."),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     profile = selectors.get_professional_profile(customer)
     if not profile:
-        return error_response("Professional profile not found.", status_code=status.HTTP_404_NOT_FOUND)
+        return error_response(
+            _localize_error_message(request, "Professional profile not found."),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     return success_response(data=ProfessionalProfileSerializer(profile).data)
 
@@ -349,7 +446,10 @@ def get_professional_profile(request: Request):
 def get_professional_profile_by_customer(request: Request, customer_id):
     profile = selectors.get_professional_profile_by_customer_id(customer_id)
     if not profile:
-        return error_response("Professional profile not found.", status_code=status.HTTP_404_NOT_FOUND)
+        return error_response(
+            _localize_error_message(request, "Professional profile not found."),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
     return success_response(data=ProfessionalProfileSerializer(profile).data)
 
 
